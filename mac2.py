@@ -106,7 +106,7 @@ def mac_cell(control_in, question, mem_prev, k, dim, n_objs, reuse=None):
     c_i = control(control_in, question, dim, reuse=reuse)
     c_i = tf.nn.dropout(c_i, 0.85)
     r_i = read(c_i, mem_prev, k, dim, n_objs, reuse=reuse)
-    r_i = tf.nn.dropout(r_i, 0.9)
+    #r_i = tf.nn.dropout(r_i, 0.9)
     m_i = write(r_i, mem_prev, c_i, dim, reuse=reuse)
 
     return c_i, m_i
@@ -116,7 +116,7 @@ def train(sess, nbatch, data_train, data_test):
     dim = 128
     n_objs = 8*8
     answer_size = 10
-    num_steps = 6
+    num_steps = 5
 
     b_images = tf.placeholder(tf.float32, shape=[nbatch,128,128,3])
     b_questions = tf.placeholder(tf.float32, shape=[nbatch,11])
@@ -137,11 +137,11 @@ def train(sess, nbatch, data_train, data_test):
         if i > 0:
             reuse = True
 
-        question = fc(b_questions, 11, activation=tf.nn.tanh, name='qfc_{}'.format(i))
+        question = fc(b_questions, 64, activation=tf.nn.tanh, name='qfc_{}'.format(i))
 
         c_i, m_i = mac_cell(c_i, question, m_i, k, dim, n_objs, reuse)
 
-    output = fc(tf.concat([b_questions, m_i], axis=1), 64)
+    output = fc(tf.concat([b_questions, m_i], axis=1), 128)
     output = tf.nn.dropout(output, 0.85)
     output = fc(output, answer_size, activation=tf.nn.softmax)
 
@@ -159,7 +159,10 @@ def train(sess, nbatch, data_train, data_test):
 
     smooth_loss = 0
     smooth_train_acc = 0
-    for gs in range(1000000):
+    train_losses = []
+    train_accs = []
+    test_accs = []
+    for gs in range(200000):
         sample_images, sample_questions, sample_answers = sample_batch(nbatch, data_train)
         #print(np.min(sample_answers), np.max(sample_answers))
 
@@ -185,8 +188,11 @@ def train(sess, nbatch, data_train, data_test):
             smooth_loss = 0.99*smooth_loss + 0.01*train_loss
             smooth_train_acc = 0.99*smooth_train_acc + 0.01*train_acc
 
+        train_losses.append(train_loss)
+        train_accs.append(train_acc)
+
         
-        if gs % 2000 == 0:
+        if gs % 1000 == 0:
             test_loss = 0
             test_correct = 0
             num_batches = len(data_test) // nbatch
@@ -202,6 +208,7 @@ def train(sess, nbatch, data_train, data_test):
                 test_correct += np.sum([1 if p==ans else 0 for p,ans in zip(batch_preds,sample_answers)])
             test_loss /= num_batches
             test_acc = test_correct / len(data_test)
+            test_accs.append(test_acc)
             print(gs, test_loss, test_acc)
             print('it {}: test_loss={:.4f}, test_accuracy={:.4f}'.format(gs, test_loss, test_acc))
 
@@ -209,6 +216,14 @@ def train(sess, nbatch, data_train, data_test):
         if gs % 100 == 0:
             print('it {}: smooth_loss={:.4f}, train_loss={:.4f}, smooth_train_acc={:.4f}, train_acc={:.4f}'.format(
                 gs, smooth_loss, train_loss, smooth_train_acc, train_acc))
+
+
+        if gs % 1000 == 0:
+            filename = 'modeldata/mac_{}_{}.pickle'.format(dim, gs)
+            print('Saving data to {}'.format(filename)) 
+            with open(filename, 'wb') as f:
+                pickle.dump((train_losses, train_accs, test_accs), f)
+            print('Done saving')
 
 
 

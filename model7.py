@@ -60,7 +60,7 @@ def conv2d(inputs, filters, kernel_size, strides=(1,1), padding='same', activati
 
 
 def train(sess, nbatch, data_train, data_test):
-    hidden_size = 128
+    hidden_size = 64
     num_steps = 4
     answer_size = 10
 
@@ -74,13 +74,14 @@ def train(sess, nbatch, data_train, data_test):
     cell = tf.contrib.rnn.MultiRNNCell([get_cell()])
     # TODO try dropout
 
-    b_images = tf.placeholder(tf.float32, shape=[nbatch,75,75,3])
+    b_images = tf.placeholder(tf.float32, shape=[nbatch,128,128,3])
     b_questions = tf.placeholder(tf.float32, shape=[nbatch,11])
     b_answers = tf.placeholder(tf.int32, shape=[nbatch])
 
-    resized_images = tf.image.resize_images(b_images, [64, 64])
-    conv_1 = conv2d(resized_images, 24, 7, strides=(2,2)) # 32
-    conv_2 = conv2d(conv_1, 24, 5, strides=(2,2)) # 16
+    #resized_images = tf.image.resize_images(b_images, [64, 64])
+    conv_1 = conv2d(b_images, 24, 5, strides=(2,2)) # 64
+    conv_1 = conv2d(conv_1, 24, 5, strides=(2,2)) # 32
+    conv_2 = conv2d(conv_1, 24, 3, strides=(2,2)) # 16
     conv_3 = conv2d(conv_2, 24, 3, strides=(2,2)) # 8
     #conv_3 = tf.layers.flatten(conv_3)
 
@@ -100,8 +101,8 @@ def train(sess, nbatch, data_train, data_test):
             if time_step > 0:
                 tf.get_variable_scope().reuse_variables()
 
-            #fc_1 = fc(tf.concat([cell_output, b_questions], axis=1), 256, name='fc_1')
-            fc_1 = fc(tf.concat([cell_output, b_questions], axis=1), 256)
+            fc_1 = fc(tf.concat([cell_output, b_questions], axis=1), 256, name='fc_1')
+            #fc_1 = fc(tf.concat([cell_output, b_questions], axis=1), 256)
             #fc_1 = tf.layers.dropout(fc_1, rate=0.2) # dropout here doesn't work
             #fc_1_2 = fc(fc_1, 128, name='fc_1_2')
             #fc_1_2 = tf.layers.dropout(fc_1, rate=0.3)
@@ -124,7 +125,7 @@ def train(sess, nbatch, data_train, data_test):
 
             #conv_att = tf.concat([conv_att, conv_att_2, b_questions], axis=1)
 
-            fc_3 = fc(conv_att, 128, name='fc_3', activation=None)
+            fc_3 = fc(conv_att, hidden_size, name='fc_3', activation=None)
             fc_3 = tf.layers.dropout(fc_3, rate=0.3)
             #fc_3_2 = fc(fc_3, 128, name='fc_3_2', activation=None)
 
@@ -150,8 +151,8 @@ def train(sess, nbatch, data_train, data_test):
     #loss_coefs = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.8, 0.9, 1.0]
     #loss_coefs = [0.2, 0.3, 0.4, 0.5, 0.6, 1.0]
     #loss_coefs = [0.1, 0.1, 0.1, 0.3, 0.4, 1.0]
-    #loss_coefs_1 = [0.8, 0.8, 0.5, 0.5, 0.5, 0.5]
-    loss_coefs_1 = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    loss_coefs_1 = [0.8, 0.8, 0.5, 0.5, 0.5, 0.5]
+    #loss_coefs_1 = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
     #loss_coefs_1 = [0.1, 0.1, 0.2, 0.2, 0.3, 1.0]
     loss_coefs_2 = [0.1, 0.1, 0.2, 0.2, 0.3, 1.0]
     #loss_coefs = [0.05, 0.1, 0.3, 1.0]
@@ -182,6 +183,9 @@ def train(sess, nbatch, data_train, data_test):
     smooth_loss = 0
     smooth_loss0 = 0
     smooth_train_acc = 0
+    train_losses_save = []
+    train_accs_save = []
+    test_accs_save = []
     for gs in range(100000):
         sample_images, sample_questions, sample_answers = sample_batch(nbatch, data_train)
         #print(np.min(sample_answers), np.max(sample_answers))
@@ -212,6 +216,9 @@ def train(sess, nbatch, data_train, data_test):
         train_correct = np.sum([1 if p==ans else 0 for p,ans in zip(preds,sample_answers)])
         train_acc = train_correct / nbatch
 
+        train_losses_save.append(train_losses)
+        train_accs_save.append(train_acc)
+
         if smooth_loss == 0:
             smooth_loss0 = train_loss0
             smooth_loss = train_loss
@@ -222,7 +229,7 @@ def train(sess, nbatch, data_train, data_test):
             smooth_train_acc = 0.99*smooth_train_acc + 0.01*train_acc
 
         
-        if gs % 500 == 0:
+        if gs % 1000 == 0:
             test_losses = np.zeros(len(losses))
             test_correct = 0
             num_batches = len(data_test) // nbatch
@@ -241,6 +248,7 @@ def train(sess, nbatch, data_train, data_test):
                 test_correct += np.sum([1 if p==ans else 0 for p,ans in zip(batch_preds,sample_answers)])
             test_losses /= num_batches
             test_acc = test_correct / len(data_test)
+            test_accs_save.append(test_acc)
             print('it {}: test_loss={:.4f}, test_accuracy={:.4f}'.format(gs, test_losses[-1], test_acc))
             print('it {}: {}'.format(gs, ['{:.4f}'.format(l) for l in test_losses]))
 
@@ -248,7 +256,15 @@ def train(sess, nbatch, data_train, data_test):
         if gs % 100 == 0:
             print('it {}: smooth_loss=[{:.4f}, {:.4f}], train_loss={:.4f}, smooth_train_acc={:.4f}, train_acc={:.4f} {}'.format(
                 gs, smooth_loss0, smooth_loss, train_loss, smooth_train_acc, train_acc, marker))
-            print('it {}: {}'.format(gs, ['{:.4f}'.format(l) for l in train_losses]))
+            #print('it {}: {}'.format(gs, ['{:.4f}'.format(l) for l in train_losses]))
+
+        if gs % 5000 == 0:
+            filename = 'modeldata/lstm_{}_{}.pickle'.format(hidden_size, gs)
+            print('Saving data to {}'.format(filename)) 
+            with open(filename, 'wb') as f:
+                pickle.dump((train_losses_save, train_accs_save, test_accs_save), f)
+            print('Done saving')
+            
 
 
 

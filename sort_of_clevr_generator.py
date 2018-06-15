@@ -5,15 +5,21 @@ import random
 #import cPickle as pickle
 import pickle
 
+import matplotlib as mpl
+mpl.use('TkAgg')
+import matplotlib.pyplot as plt
+
 train_size = 9800
 test_size = 400
-img_size = 128
-size = 10
+#train_size = 1
+#test_size = 1
+img_size = 75
+size = 5
 question_size = 11 ##6 for one-hot vector of color, 2 for question type, 3 for question subtype
 """Answer : [yes, no, rectangle, circle, r, g, b, o, k, y]"""
 
 nb_questions = 10
-dirs = './data'
+dirs = './data2'
 
 colors = [
     (0,0,255),##r
@@ -36,8 +42,10 @@ def center_generate(objects):
         center = np.random.randint(0+size, img_size - size, 2)        
         if len(objects) > 0:
             for name,c,shape in objects:
+                #print("wtf")
                 if ((center - c) ** 2).sum() < ((size * 2) ** 2):
                     pas = False
+                #print("a")
         if pas:
             return center
 
@@ -141,6 +149,8 @@ def build_dataset():
     norelations = (norel_questions, norel_answers)
     
     img = img/255.
+    #plt.imshow(img)
+    #plt.show()
     dataset = (img, relations, norelations)
     return dataset
 
@@ -156,7 +166,7 @@ train_datasets = [build_dataset() for _ in range(train_size)]
 
 
 print('saving datasets...')
-filename = os.path.join(dirs,'sort-of-clevr.pickle')
+filename = os.path.join(dirs,'sort-of-clevr75.pickle')
 with  open(filename, 'wb') as f:
     pickle.dump((train_datasets, test_datasets), f)
 print('datasets saved at {}'.format(filename))
